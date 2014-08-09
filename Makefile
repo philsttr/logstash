@@ -4,6 +4,7 @@
 #
 JRUBY_VERSION=1.7.11
 ELASTICSEARCH_VERSION=1.1.1
+DISRUPTOR_VERSION=3.3.0
 
 WITH_JRUBY=java -jar $(shell pwd)/$(JRUBY) -S
 JRUBY=vendor/jar/jruby-complete-$(JRUBY_VERSION).jar
@@ -12,6 +13,8 @@ JRUBY_CMD=bin/logstash env java -jar $(JRUBY)
 
 ELASTICSEARCH_URL=http://download.elasticsearch.org/elasticsearch/elasticsearch
 ELASTICSEARCH=vendor/jar/elasticsearch-$(ELASTICSEARCH_VERSION)
+DISRUPTOR_URL=http://repo1.maven.org/maven2/com/lmax/disruptor/$(DISRUPTOR_VERSION)/disruptor-$(DISRUPTOR_VERSION).jar
+DISRUPTOR=vendor/jar/disruptor-$(DISRUPTOR_VERSION).jar
 TYPESDB=vendor/collectd/types.db
 COLLECTD_VERSION=5.4.0
 TYPESDB_URL=https://collectd.org/files/collectd-$(COLLECTD_VERSION).tar.gz
@@ -138,12 +141,17 @@ vendor/jar: | vendor
 vendor-jruby: $(JRUBY)
 
 $(JRUBY): | vendor/jar
-	$(QUIET)echo "=> Downloading jruby $(JRUBY_VERSION)"
+	@echo "=> Downloading jruby $(JRUBY_VERSION)"
 	$(QUIET)$(DOWNLOAD_COMMAND) $@ $(JRUBY_URL)
 
 vendor/jar/elasticsearch-$(ELASTICSEARCH_VERSION).tar.gz: | wget-or-curl vendor/jar
 	@echo "=> Fetching elasticsearch"
 	$(QUIET)$(DOWNLOAD_COMMAND) $@ $(ELASTICSEARCH_URL)/elasticsearch-$(ELASTICSEARCH_VERSION).tar.gz
+
+vendor-disruptor: $(DISRUPTOR)
+$(DISRUPTOR): | wget-or-curl vendor/jar
+	@echo "=> Fetching disruptor"
+	$(QUIET)$(DOWNLOAD_COMMAND) $@ $(DISRUPTOR_URL)
 
 vendor/jar/graphtastic-rmiclient.jar: | wget-or-curl vendor/jar
 	@echo "=> Fetching graphtastic rmi client jar"
@@ -219,7 +227,7 @@ vendor/ua-parser/regexes.yaml: | vendor/ua-parser/
 
 .PHONY: test
 test: QUIET_OUTPUT=
-test: | $(JRUBY) vendor-elasticsearch vendor-geoip vendor-collectd vendor-gems
+test: | $(JRUBY) vendor-elasticsearch vendor-geoip vendor-collectd vendor-gems vendor-disruptor
 	$(SPEC_ENV) bin/logstash rspec $(SPEC_OPTS) --order rand --fail-fast $(TESTS)
 
 .PHONY: reporting-test
@@ -343,7 +351,7 @@ package: build/logstash-$(VERSION).tar.gz
 vendor/kibana: | vendor
 	@echo "=> Fetching kibana"
 	$(QUIET)mkdir vendor/kibana || true
-	$(DOWNLOAD_COMMAND) - $(KIBANA_URL) | tar -C $@ -zx --strip-components=1
+	$(QUIET)$(DOWNLOAD_COMMAND) - $(KIBANA_URL) | tar -C $@ -zx --strip-components=1
 
 build/tarball: | build
 	mkdir $@
@@ -355,7 +363,7 @@ show:
 
 .PHONY: prepare-tarball
 prepare-tarball tarball zip: WORKDIR=build/tarball/logstash-$(VERSION)
-prepare-tarball: vendor/kibana $(ELASTICSEARCH) $(JRUBY) $(GEOIP) $(TYPESDB) vendor-gems
+prepare-tarball: vendor/kibana $(ELASTICSEARCH) $(JRUBY) $(GEOIP) $(TYPESDB) vendor-gems vendor-disruptor
 prepare-tarball: vendor/ua-parser/regexes.yaml
 prepare-tarball:
 	@echo "=> Preparing tarball"

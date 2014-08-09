@@ -69,11 +69,11 @@ class LogStash::Inputs::Syslog < LogStash::Inputs::Base
   end # def register
 
   public
-  def run(output_queue)
+  def run
     # udp server
     udp_thr = Thread.new do
       begin
-        udp_listener(output_queue)
+        udp_listener
       rescue => e
         break if @shutdown_requested
         @logger.warn("syslog udp listener died",
@@ -87,7 +87,7 @@ class LogStash::Inputs::Syslog < LogStash::Inputs::Base
     # tcp server
     tcp_thr = Thread.new do
       begin
-        tcp_listener(output_queue)
+        tcp_listener
       rescue => e
         break if @shutdown_requested
         @logger.warn("syslog tcp listener died",
@@ -105,7 +105,7 @@ class LogStash::Inputs::Syslog < LogStash::Inputs::Base
   end # def run
 
   private
-  def udp_listener(output_queue)
+  def udp_listener
     @logger.info("Starting syslog udp listener", :address => "#{@host}:#{@port}")
 
     if @udp
@@ -122,7 +122,7 @@ class LogStash::Inputs::Syslog < LogStash::Inputs::Base
         decorate(event)
         event["host"] = client[3]
         syslog_relay(event)
-        output_queue << event
+        event.publish
       end
     end
   ensure
@@ -130,7 +130,7 @@ class LogStash::Inputs::Syslog < LogStash::Inputs::Base
   end # def udp_listener
 
   private
-  def tcp_listener(output_queue)
+  def tcp_listener
     @logger.info("Starting syslog tcp listener", :address => "#{@host}:#{@port}")
     @tcp = TCPServer.new(@host, @port)
     @tcp_clients = []
@@ -148,7 +148,7 @@ class LogStash::Inputs::Syslog < LogStash::Inputs::Base
               decorate(event)
               event["host"] = ip
               syslog_relay(event)
-              output_queue << event
+              event.publish
             end
           end
         rescue Errno::ECONNRESET

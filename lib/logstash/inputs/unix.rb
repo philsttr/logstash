@@ -66,7 +66,7 @@ class LogStash::Inputs::Unix < LogStash::Inputs::Base
   end # def register
 
   private
-  def handle_socket(socket, output_queue)
+  def handle_socket(socket)
     begin
       hostname = Socket.gethostname
       loop do
@@ -85,7 +85,7 @@ class LogStash::Inputs::Unix < LogStash::Inputs::Base
           decorate(event)
           event["host"] = hostname
           event["path"] = @path
-          output_queue << event
+          event.publish
         end
       end # loop do
     rescue => e
@@ -110,7 +110,7 @@ class LogStash::Inputs::Unix < LogStash::Inputs::Base
   end # def server?
 
   public
-  def run(output_queue)
+  def run
     if server?
       @thread = Thread.current
       @client_threads = []
@@ -123,7 +123,7 @@ class LogStash::Inputs::Unix < LogStash::Inputs::Base
             @logger.debug("Accepted connection",
                           :server => "#{@path}")
             begin
-              handle_socket(s, output_queue)
+              handle_socket(s)
             rescue Interrupted
               s.close rescue nil
             end
@@ -147,7 +147,7 @@ class LogStash::Inputs::Unix < LogStash::Inputs::Base
         client_socket = UNIXSocket.new(@path)
         client_socket.instance_eval { class << self; include ::LogStash::Util::SocketPeer end }
         @logger.debug("Opened connection", :client => @path)
-        handle_socket(client_socket, output_queue)
+        handle_socket(client_socket)
       end # loop
     end
   end # def run

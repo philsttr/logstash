@@ -66,7 +66,7 @@ class LogStash::Agent < Clamp::Command
   # Run the agent. This method is invoked after clamp parses the
   # flags given to this program.
   def execute
-    require "logstash/pipeline"
+    require "logstash/pipeline/pipeline"
     require "cabin" # gem 'cabin'
     require "logstash/plugin"
     @logger = Cabin::Channel.get(LogStash)
@@ -109,7 +109,7 @@ class LogStash::Agent < Clamp::Command
     end
 
     begin
-      pipeline = LogStash::Pipeline.new(@config_string)
+      pipeline = LogStash::Pipeline::Pipeline.new(@config_string)
     rescue LoadError => e
       fail("Configuration problem.")
     end

@@ -102,7 +102,7 @@ class LogStash::Inputs::SQS < LogStash::Inputs::Threadable
   end # def register
 
   public
-  def run(output_queue)
+  def run
     @logger.debug("Polling SQS queue", :queue => @queue)
 
     receive_opts = {
@@ -128,7 +128,7 @@ class LogStash::Inputs::SQS < LogStash::Inputs::Threadable
                 event[@sent_timestamp_field] = LogStash::Timestamp.new(message.sent_timestamp).utc
               end
               @logger.debug? && @logger.debug("Processed SQS message", :message_id => message.id, :message_md5 => message.md5, :sent_timestamp => message.sent_timestamp, :queue => @queue)
-              output_queue << event
+              event.publish
               message.delete
             end # codec.decode
           end # valid SQS message

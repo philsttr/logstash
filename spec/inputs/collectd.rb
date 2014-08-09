@@ -19,8 +19,6 @@ describe "inputs/collectd", :socket => true do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       # Sleep so collectd can init itself
       sleep 3
@@ -76,8 +74,6 @@ describe "inputs/collectd", :socket => true do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       # Sleep so collectd can init itself
       sleep 3
@@ -106,8 +102,6 @@ describe "inputs/collectd", :socket => true do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       # Sleep so collectd can init itself
       sleep 3
@@ -138,8 +132,6 @@ describe "inputs/collectd", :socket => true do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       # Sleep so collectd can init itself
       sleep 3
@@ -169,8 +161,6 @@ describe "inputs/collectd", :socket => true do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       # Sleep so collectd can init itself
       sleep 3
@@ -199,8 +189,6 @@ describe "inputs/collectd", :socket => true do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       # Sleep so collectd can init itself
       sleep 3
@@ -237,8 +225,6 @@ describe "inputs/collectd", :socket => true do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       # Sleep so collectd can init itself
       sleep 3
@@ -275,8 +261,6 @@ describe "inputs/collectd", :socket => true do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       # Sleep so collectd can init itself
       sleep 3
@@ -306,8 +290,6 @@ describe "inputs/collectd", :socket => true do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       # Sleep so collectd can init itself
       sleep 3

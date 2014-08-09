@@ -31,8 +31,7 @@ class LogStash::Inputs::RabbitMQ
       @logger.info("Registering input #{@connection_url}")
     end
 
-    def run(output_queue)
-      @output_queue          = output_queue
+    def run
       @break_out_of_the_loop = java.util.concurrent.atomic.AtomicBoolean.new(false)
 
       # MarchHare does not raise exceptions when connection goes down with a blocking
@@ -113,7 +112,7 @@ class LogStash::Inputs::RabbitMQ
       @consumer = @q.build_consumer(:block => true) do |metadata, data|
         @codec.decode(data) do |event|
           decorate(event)
-          @output_queue << event if event
+          event.publish if event
         end
         @ch.ack(metadata.delivery_tag) if @ack
       end

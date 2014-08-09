@@ -33,6 +33,14 @@ require "logstash/json"
 class LogStash::Event
   class DeprecatedMethod < StandardError; end
 
+  # This is the RingBuffer to which to publish.
+  # Initially this will be nil, before the Pipeline is started.
+  # When the pipeline starts, it will call initialize_new_events_from, and this will be non-nil
+  # When the Pipeline stops, it will call initialize_new_events_from_allocation, and this will become nil again
+  @@ring_buffer = nil
+  
+  attr_reader :sequence
+
   CHAR_PLUS = "+"
   TIMESTAMP = "@timestamp"
   VERSION = "@version"
@@ -43,27 +51,40 @@ class LogStash::Event
   public
   def initialize(data = {})
     @logger = Cabin::Channel.get(LogStash)
-    @cancelled = false
-    @data = data
-    @accessors = LogStash::Util::Accessors.new(data)
-    @data[VERSION] ||= VERSION_ONE
-    @data[TIMESTAMP] = init_timestamp(@data[TIMESTAMP])
+    reset(nil, data)
+    @accessors = LogStash::Util::Accessors.new(@data)
   end # def initialize
 
-  public
-  def cancel
-    @cancelled = true
-  end # def cancel
-
-  public
-  def uncancel
+  public  
+  def reset(sequence, data = {})
+    @published = false
     @cancelled = false
-  end # def uncancel
+    @sequence = sequence
+    if @data.nil?
+      @data = data
+    else
+      @data.clear
+      LogStash::Util.hash_merge(@data, data)
+    end
+    @data[VERSION] ||= VERSION_ONE
+    @data[TIMESTAMP] = init_timestamp(@data[TIMESTAMP])
+  end
+  
+  public
+  def cancel()
+    @cancelled = true
+    publish if !@published 
+  end # def cancel
 
   public
   def cancelled?
     return @cancelled
   end # def cancelled?
+  
+  public
+  def published?
+    return @published
+  end
 
   # Create a deep-ish copy of this event.
   public
@@ -73,7 +94,7 @@ class LogStash::Event
       # TODO(sissel): Recurse if this is a hash/array?
       copy[k] = begin v.clone rescue v end
     end
-    return self.class.new(copy)
+    return LogStash::Event.new(copy)
   end # def clone
 
   if RUBY_ENGINE == "jruby"
@@ -130,19 +151,6 @@ class LogStash::Event
   def to_hash
     @data
   end # def to_hash
-
-  public
-  def overwrite(event)
-    # pickup new event @data and also pickup @accessors
-    # otherwise it will be pointing on previous data
-    @data = event.instance_variable_get(:@data)
-    @accessors = event.instance_variable_get(:@accessors)
-
-    #convert timestamp if it is a String
-    if @data[TIMESTAMP].is_a?(String)
-      @data[TIMESTAMP] = LogStash::Timestamp.parse_iso8601(@data[TIMESTAMP])
-    end
-  end
 
   public
   def include?(key)
@@ -228,8 +236,52 @@ class LogStash::Event
     self["tags"] << value unless self["tags"].include?(value)
   end
 
+  def tag?(value)
+    self["tags"].include?(value) if !self["tags"].nil? 
+  end
+  
+  # Publishes an event to the Pipeline's RingBuffer.
+  # MUST be called for every new or clone event,
+  # otherwise the pipeline can hang.  
+  def publish
+    return if @published
+    @@ring_buffer.publish(@sequence) if !@@ring_buffer.nil?
+    @published = true
+  end
+  
+  # Redefines the :new class method to retrieve events from the RingBuffer,
+  # instead of instantiating a new event.
+  # 
+  # Called by the LogStash::Pipeline::Pipeline after the disruptor has started
+  # (and therefore after all event objects that will ever exist are created)
+  def self.initialize_new_events_from(ring_buffer)
+    @@ring_buffer = ring_buffer
+    
+    LogStash::Event.class_eval do
+      def self.new(data)
+        sequence = @@ring_buffer.next()
+        event = @@ring_buffer.get(sequence)
+        event.reset(sequence, data)
+        return event
+      end
+    end
+    
+  end
+  
+  # Removes the :new class method that was defined in initialize_new_events_from
+  # This allows events to be allocated again (outside of a RingBuffer).
+  def self.initialize_new_events_from_allocation
+    @@ring_buffer = nil
+    class << LogStash::Event
+      remove_method :new
+    end
+  end
+  
+  def self.initializing_from_ring_buffer?
+    return !@@ring_buffer.nil?
+  end
+    
   private
-
   def init_timestamp(o)
     begin
       timestamp = o ? LogStash::Timestamp.coerce(o) : LogStash::Timestamp.now
@@ -246,4 +298,5 @@ class LogStash::Event
 
     LogStash::Timestamp.now
   end
+  
 end # class LogStash::Event

@@ -62,13 +62,13 @@ class LogStash::Inputs::IMAP < LogStash::Inputs::Base
     return imap
   end
 
-  def run(queue)
+  def run
     Stud.interval(@check_interval) do
-      check_mail(queue)
+      check_mail
     end
   end
 
-  def check_mail(queue)
+  def check_mail
     # TODO(sissel): handle exceptions happening during runtime:
     # EOFError, OpenSSL::SSL::SSLError
     imap = connect
@@ -80,7 +80,7 @@ class LogStash::Inputs::IMAP < LogStash::Inputs::Base
       items.each do |item|
         next unless item.attr.has_key?("RFC822")
         mail = Mail.read_from_string(item.attr["RFC822"])
-        queue << parse_mail(mail)
+        parse_mail(mail).publish
       end
 
       imap.store(id_set, '+FLAGS', @delete ? :Deleted : :Seen)

@@ -20,8 +20,6 @@ describe "inputs/gelf" do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       # generate random characters (message is zipped!) from printable ascii ( SPACE till ~ )
       # to trigger gelf chunking

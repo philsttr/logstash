@@ -56,10 +56,10 @@ class LogStash::Inputs::Gelf < LogStash::Inputs::Base
   end # def register
 
   public
-  def run(output_queue)
+  def run
     begin
       # udp server
-      udp_listener(output_queue)
+      udp_listener
     rescue => e
       @logger.warn("gelf listener died", :exception => e, :backtrace => e.backtrace)
       sleep(5)
@@ -68,7 +68,7 @@ class LogStash::Inputs::Gelf < LogStash::Inputs::Base
   end # def run
 
   private
-  def udp_listener(output_queue)
+  def udp_listener
     @logger.info("Starting gelf listener", :address => "#{@host}:#{@port}")
 
     if @udp
@@ -79,7 +79,10 @@ class LogStash::Inputs::Gelf < LogStash::Inputs::Base
     @udp = UDPSocket.new(Socket::AF_INET)
     @udp.bind(@host, @port)
 
-    while true
+    while !finished?
+      ready = IO.select([@udp], nil, nil, 5)
+      next if ready.nil?
+        
       line, client = @udp.recvfrom(8192)
       begin
         data = Gelfd::Parser.parse(line)
@@ -100,7 +103,7 @@ class LogStash::Inputs::Gelf < LogStash::Inputs::Base
       remap_gelf(event) if @remap
       strip_leading_underscore(event) if @strip_leading_underscore
       decorate(event)
-      output_queue << event
+      event.publish
     end
   rescue LogStash::ShutdownSignal
     # Do nothing, shutdown.

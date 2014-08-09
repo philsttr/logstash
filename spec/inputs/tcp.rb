@@ -37,8 +37,6 @@ describe LogStash::Inputs::Tcp do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       socket = Stud.try(5.times) { TCPSocket.new("127.0.0.1", port) }
       event_count.times do |i|
@@ -70,8 +68,6 @@ describe LogStash::Inputs::Tcp do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       socket = Stud.try(5.times) { TCPSocket.new("127.0.0.1", port) }
       text = "\xA3" # the £ symbol in ISO-8859-1 aka Latin-1
@@ -104,8 +100,6 @@ describe LogStash::Inputs::Tcp do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       data = {
         "hello" => "world",
@@ -144,8 +138,6 @@ describe LogStash::Inputs::Tcp do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       data = {
         "hello" => "world"
@@ -176,8 +168,6 @@ describe LogStash::Inputs::Tcp do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       data = {
         "hello" => "world",
@@ -215,8 +205,6 @@ describe LogStash::Inputs::Tcp do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       event_count.times do |i|
         socket = Stud.try(5.times) { TCPSocket.new("127.0.0.1", port) }
@@ -249,8 +237,6 @@ describe LogStash::Inputs::Tcp do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       inputs = pipeline.instance_variable_get("@inputs")
       insist { inputs.size } == 1

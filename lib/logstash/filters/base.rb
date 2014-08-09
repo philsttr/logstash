@@ -120,9 +120,9 @@ class LogStash::Filters::Base < LogStash::Plugin
   # would remove the field with name "foo_hello" if it is present. The second 
   # example would remove an additional, non-dynamic field.
   config :remove_field, :validate => :array, :default => []
-
+    
   RESERVED = ["type", "tags", "exclude_tags", "include_fields", "exclude_fields", "add_tag", "remove_tag", "add_field", "remove_field", "include_any", "exclude_any"]
-
+    
   public
   def initialize(params)
     super
@@ -135,19 +135,46 @@ class LogStash::Filters::Base < LogStash::Plugin
     raise "#{self.class}#register must be overidden"
   end # def register
 
+  # Subclasses must define a filter method.
+  # 
+  # If the Filter does not care about batches from the pipeline,
+  # then the filter method should take one argument (the event to filter).
+  #
+  # If the Filter does care about batches from the pipeline,
+  # then the filter method should take two arguments
+  # (the event to filter, and a boolean that indicates if the batch has ended).
+  #
+  # This simplifies filter implementation for those that don't care about batches,
+  # and preserves backwards compatibility with filters that were implemented
+  # before pipeline batching was available.
   public
-  def filter(event)
+  def filter(event, end_of_batch)
     raise "#{self.class}#filter must be overidden"
   end # def filter
-
+  
   public
-  def execute(event, &block)
-    filter(event, &block)
-  end # def execute
+  def execute(event, end_of_batch, &block)
+    if (batch_aware?)
+      filter(event, end_of_batch, &block)
+    else
+      filter(event, &block)
+    end
+  end
 
   public
   def threadsafe?
     @threadsafe
+  end
+
+  public
+  def batch_aware?
+    if (@batch_aware.nil?)
+      # Don't use self.method here, because some filters have a "method" config option.
+      # LogStash::Config::Mixin will define a method for each config option with the config option name.
+      # So, LogStash::Config::Mixin will overwrite the method named "method" with a config option accessor
+      @batch_aware = self.class.instance_method(:filter).arity != 1
+    end
+    return @batch_aware
   end
 
   # a filter instance should call filter_matched from filter if the event

@@ -6,9 +6,19 @@ require "logstash/filters/base"
 require "logstash/inputs/base"
 require "logstash/outputs/base"
 require "logstash/errors"
+require "logstash/eventpublishingqueue"
 require "stud/interval" # gem stud
+LogStash::Environment.load_disruptor_jars!
+java_import com.lmax.disruptor.dsl.Disruptor
+java_import java.util.concurrent.Executors
+java_import com.lmax.disruptor.EventHandler
 
-class LogStash::Pipeline
+require "logstash/event.rb"
+require "logstash/pipeline/filtereventhandler.rb"
+require "logstash/pipeline/outputeventhandler.rb"
+require "logstash/pipeline/exceptionhandler.rb"
+
+class LogStash::Pipeline::Pipeline
   def initialize(configstr)
     @logger = Cabin::Channel.get(LogStash)
     grammar = LogStashConfigParser.new
@@ -29,15 +39,7 @@ class LogStash::Pipeline
     rescue => e
       raise
     end
-
-    @input_to_filter = SizedQueue.new(20)
-
-    # If no filters, pipe inputs directly to outputs
-    if !filters?
-      @filter_to_output = @input_to_filter
-    else
-      @filter_to_output = SizedQueue.new(20)
-    end
+    
     @settings = {
       "filter-workers" => 1,
     }
@@ -68,23 +70,41 @@ class LogStash::Pipeline
 
   def run
     @started = true
+    
+    # TODO (philsttr) handle different wait strategies
+    disruptor = Disruptor.new(LogStashEventFactory.new, 512, Executors.newCachedThreadPool)
+    
+    filterHandler = LogStash::Pipeline::FilterEventHandler.new(self)
+    outputHandler = LogStash::Pipeline::OutputEventHandler.new(self)
+    disruptor.handleEventsWith([filterHandler].to_java(EventHandler)).then([outputHandler].to_java(EventHandler))
+    
+    disruptor.handleExceptionsFor(filterHandler).with(LogStash::Pipeline::ExceptionHandler.new("filter"));
+    disruptor.handleExceptionsFor(outputHandler).with(LogStash::Pipeline::ExceptionHandler.new("output"));
+    
+    register_filters if filters?
+    register_outputs
+
+    disruptor.start
+    
+    @event_publishing_queue = LogStash::EventPublishingQueue.new
+    # Force new events to be retrieved from the ring_buffer instead of allocating new objects
+    LogStash::Event.initialize_new_events_from(disruptor.ringBuffer)
+    
     @input_threads = []
     start_inputs
-    start_filters if filters?
-    start_outputs
 
     @ready = true
 
     @logger.info("Pipeline started")
     wait_inputs
 
-    # In theory there's nothing to do to filters to tell them to shutdown?
-    if filters?
-      shutdown_filters
-      wait_filters
-    end
-    shutdown_outputs
-    wait_outputs
+    disruptor.shutdown
+    
+    # Allocate new events, instead of retrieving them from the ring_buffer (useful for unit tests)
+    LogStash::Event.initialize_new_events_from_allocation
+    
+    teardown_filters if filters?
+    teardown_outputs
 
     @logger.info("Pipeline shutdown complete.")
 
@@ -100,24 +120,6 @@ class LogStash::Pipeline
     # signal handler isn't invoked it seems? I dunno, haven't looked much into
     # it.
     shutdown
-  end
-
-  def shutdown_filters
-    @input_to_filter.push(LogStash::ShutdownSignal)
-  end
-
-  def wait_filters
-    @filter_threads.each(&:join) if @filter_threads
-  end
-
-  def shutdown_outputs
-    # nothing, filters will do this
-    @filter_to_output.push(LogStash::ShutdownSignal)
-  end
-
-  def wait_outputs
-    # Wait for the outputs to stop
-    @output_threads.each(&:join)
   end
 
   def start_inputs
@@ -137,22 +139,6 @@ class LogStash::Pipeline
     end
   end
 
-  def start_filters
-    @filters.each(&:register)
-    @filter_threads = @settings["filter-workers"].times.collect do
-      Thread.new { filterworker }
-    end
-
-    # Set up the periodic flusher thread.
-    @flusher_thread = Thread.new { Stud.interval(5) { filter_flusher } }
-  end
-
-  def start_outputs
-    @output_threads = [
-      Thread.new { outputworker }
-    ]
-  end
-
   def start_input(plugin)
     @input_threads << Thread.new { inputworker(plugin) }
   end
@@ -160,7 +146,13 @@ class LogStash::Pipeline
   def inputworker(plugin)
     LogStash::Util::set_thread_name("<#{plugin.class.config_name}")
     begin
-      plugin.run(@input_to_filter)
+      if plugin.method(:run).arity == 0
+        # Recommended functionality where inputs just create events and call event.publish
+        plugin.run
+      else
+        # Backwards compatibility with inputs that pushed events onto a queue
+        plugin.run(@event_publishing_queue)
+      end
     rescue LogStash::ShutdownSignal
       return
     rescue => e
@@ -184,49 +176,26 @@ class LogStash::Pipeline
     plugin.teardown
   end # def inputworker
 
-  def filterworker
-    LogStash::Util::set_thread_name("|worker")
-    begin
-      while true
-        event = @input_to_filter.pop
-        if event == LogStash::ShutdownSignal
-          @input_to_filter.push(event)
-          break
-        end
-
-
-        # TODO(sissel): we can avoid the extra array creation here
-        # if we don't guarantee ordering of origin vs created events.
-        # - origin event is one that comes in naturally to the filter worker.
-        # - created events are emitted by filters like split or metrics
-        events = [event]
-        filter(event) do |newevent|
-          events << newevent
-        end
-        events.each do |event|
-          next if event.cancelled?
-          @filter_to_output.push(event)
-        end
-      end
-    rescue => e
-      @logger.error("Exception in filterworker", "exception" => e, "backtrace" => e.backtrace)
-    end
-
+  def register_filters
+    @filters.each(&:register)
+    # Set up the periodic flusher thread.
+    @flusher_thread = Thread.new { Stud.interval(5) { filter_flusher } }
+  end
+  
+  def teardown_filters
     @filters.each(&:teardown)
-  end # def filterworker
-
-  def outputworker
-    LogStash::Util::set_thread_name(">output")
+  end
+  
+  def register_outputs
     @outputs.each(&:register)
     @outputs.each(&:worker_setup)
-    while true
-      event = @filter_to_output.pop
-      break if event == LogStash::ShutdownSignal
-      output(event)
-    end # while true
+  end
+  
+  def teardown_outputs
     @outputs.each(&:teardown)
-  end # def outputworker
-
+  end
+    
+  
   # Shutdown this pipeline.
   #
   # This method is intended to be called from another thread
@@ -247,7 +216,7 @@ class LogStash::Pipeline
         input.teardown
       end
     end
-
+    
     # No need to send the ShutdownSignal to the filters/outputs nor to wait for
     # the inputs to finish, because in the #run method we wait for that anyway.
   end # def shutdown
@@ -258,36 +227,34 @@ class LogStash::Pipeline
     return klass.new(*args)
   end
 
-  def filter(event, &block)
-    @filter_func.call(event, &block)
+  def filter(event, end_of_batch = true, &block)
+    @filter_func.call(event, end_of_batch, &block)
   end
-
-  def output(event)
-    @output_func.call(event)
+  
+  def output(event, end_of_batch = true)
+    @output_func.call(event, end_of_batch)
   end
 
   def filter_flusher
-    events = []
+    LogStash::Util::set_thread_name("filterflusher")
     @filters.each do |filter|
-
-      # Filter any events generated so far in this flush.
-      events.each do |event|
-        # TODO(sissel): watchdog on flush filtration?
-        unless event.cancelled?
-          filter.filter(event)
-        end
-      end
-
       # TODO(sissel): watchdog on flushes?
       if filter.respond_to?(:flush)
-        flushed = filter.flush
-        events += flushed if !flushed.nil? && flushed.any?
+        filter.flush do |event|
+          event.publish
+        end
       end
     end
-
-    events.each do |event|
-      @logger.debug? and @logger.debug("Pushing flushed events", :event => event)
-      @filter_to_output.push(event) unless event.cancelled?
-    end
   end # def filter_flusher
+  
+  class LogStashEventFactory
+    java_implements com.lmax.disruptor.EventFactory
+    java_signature 'Object newInstance()'
+    def newInstance
+      raise "Unable to allocate a new LogStash::Event.  This typically means that either multiple Pipelines have been started, or a previous Pipeline instance was not shutdown properly." if LogStash::Event.initializing_from_ring_buffer?
+      return LogStash::Event.new
+    end
+  end
+  
 end # class Pipeline
+

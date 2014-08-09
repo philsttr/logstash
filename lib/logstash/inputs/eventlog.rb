@@ -41,7 +41,7 @@ class LogStash::Inputs::EventLog < LogStash::Inputs::Base
   end # def register
 
   public
-  def run(queue)
+  def run
     @wmi = WIN32OLE.connect("winmgmts://")
 
     wmi_query = "Select * from __InstanceCreationEvent Where TargetInstance ISA 'Win32_NTLogEvent' And (TargetInstance.LogFile = '#{@logfiles}')"
@@ -86,7 +86,7 @@ class LogStash::Inputs::EventLog < LogStash::Inputs::Base
         e["message"] = event.Message
 
         decorate(e)
-        queue << e
+        e.publish
 
       end # while
 

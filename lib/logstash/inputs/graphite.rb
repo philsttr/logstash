@@ -20,21 +20,19 @@ class LogStash::Inputs::Graphite < LogStash::Inputs::Tcp
   milestone 1
 
   public
-  def run(output_queue)
-    @queue = output_queue
+  def run
     super(self)
   end
-
+  
   # This is a silly hack to make the superclass (Tcp) give us a finished event
   # so that we can parse it accordingly.
-  def <<(event)
+  def decorate(event)
+    super
     name, value, time = event["message"].split(" ")
     event[name] = value.to_f
 
     if time != "N"
       event.timestamp = LogStash::Timestamp.at(time.to_i)
     end
-
-    @queue << event
   end
 end # class LogStash::Inputs::Graphite

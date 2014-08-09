@@ -21,9 +21,12 @@ class LogStash::Codecs::EDNLines < LogStash::Codecs::Base
   def decode(data)
     @lines.decode(data) do |event|
       begin
-        yield LogStash::Event.new(EDN.read(event["message"]))
+        ednData = EDN.read(event["message"])
+        event.cancel
+        yield LogStash::Event.new(ednData)
       rescue => e
         @logger.warn("EDN parse failure. Falling back to plain-text", :error => e, :data => data)
+        event.cancel
         yield LogStash::Event.new("message" => data)
       end
     end

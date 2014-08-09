@@ -7,7 +7,6 @@ describe "inputs/pipe" do
 
   describe "echo" do
     event_count = 1
-    tmp_file = Tempfile.new('logstash-spec-input-pipe')
 
     config <<-CONFIG
     input {
@@ -18,8 +17,6 @@ describe "inputs/pipe" do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       events = event_count.times.collect { queue.pop }
       event_count.times do |i|
@@ -41,9 +38,6 @@ describe "inputs/pipe" do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
-
       File.open(tmp_file, "a") do |fd|
         event_count.times do |i|
           # unicode smiley for testing unicode support!
@@ -54,6 +48,7 @@ describe "inputs/pipe" do
       event_count.times do |i|
         insist { events[i]["message"] } == "#{i} ☹"
       end
+      
     end # input
   end
 

@@ -219,7 +219,5 @@ class LogStash::Filters::Date < LogStash::Filters::Base
         end # begin
       end # fieldvalue.each
     end # @parsers.each
-
-    return event
   end # def filter
 end # class LogStash::Filters::Date

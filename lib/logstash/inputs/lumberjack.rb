@@ -42,12 +42,12 @@ class LogStash::Inputs::Lumberjack < LogStash::Inputs::Base
   end # def register
 
   public
-  def run(output_queue)
+  def run
     @lumberjack.run do |l|
       @codec.decode(l.delete("line")) do |event|
         decorate(event)
         l.each { |k,v| event[k] = v; v.force_encoding(Encoding::UTF_8) }
-        output_queue << event
+        event.publish
       end
     end
   end # def run

@@ -56,11 +56,6 @@ class LogStash::Outputs::Base < LogStash::Plugin
   end # def register
 
   public
-  def receive(event)
-    raise "#{self.class}#receive must be overidden"
-  end # def receive
-
-  public
   def worker_setup
     return unless @workers > 1
 
@@ -80,14 +75,43 @@ class LogStash::Outputs::Base < LogStash::Plugin
       end
     end
   end
+  
+  # Subclasses must define a receive method.
+  # 
+  # If the Output does not care about batches from the pipeline,
+  # then the receive method should take one argument (the event to output).
+  #
+  # If the Output does care about batches from the pipeline,
+  # then the receive method should take two arguments
+  # (the event to receive, and a boolean that indicates if the batch has ended).
+  #
+  # This simplifies output implementation for those that don't care about batches,
+  # and preserves backwards compatibility with outputs that were implemented
+  # before pipeline batching was available.
+  public
+  def receive(event, end_of_batch)
+    raise "#{self.class}#receive must be overidden"
+  end # def filter
 
   public
-  def handle(event)
-    receive(event)
+  def handle(event, end_of_batch)
+    if (batch_aware?)
+      receive(event, end_of_batch)
+    else
+      receive(event)
+    end
   end # def handle
   
   def handle_worker(event)
     @worker_queue.push(event)
+  end
+
+  public
+  def batch_aware?
+    if (@batch_aware.nil?)
+      @batch_aware = self.method(:receive).arity != 1
+    end
+    return @batch_aware
   end
 
   private

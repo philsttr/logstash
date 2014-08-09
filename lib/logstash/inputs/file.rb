@@ -124,7 +124,7 @@ class LogStash::Inputs::File < LogStash::Inputs::Base
   end # def register
 
   public
-  def run(queue)
+  def run
     @tail = FileWatch::Tail.new(@tail_config)
     @tail.logger = @logger
     @path.each { |path| @tail.tail(path) }
@@ -136,7 +136,7 @@ class LogStash::Inputs::File < LogStash::Inputs::Base
         decorate(event)
         event["host"] = hostname if !event.include?("host")
         event["path"] = path
-        queue << event
+        event.publish
       end
     end
     finished

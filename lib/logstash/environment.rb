@@ -24,6 +24,23 @@ module LogStash
       end
     end
 
+    # loads currently embedded disruptor jars
+    # @raise LogStash::EnvironmentError if not running under JRuby or if no jar files are found
+    def load_disruptor_jars!
+      raise(LogStash::EnvironmentError, "JRuby is required") unless jruby?
+
+      require "java"
+      jars_path = ::File.join(JAR_DIR, "/disruptor*.jar")
+      jar_files = Dir.glob(jars_path)
+
+      raise(LogStash::EnvironmentError, "Could not find disruptor jar files under #{JAR_DIR}") if jar_files.empty?
+
+      jar_files.each do |jar|
+        loaded = require jar
+        puts("Loaded #{jar}") if $DEBUG && loaded
+      end
+    end
+    
     def gem_target
       "#{LOGSTASH_HOME}/vendor/bundle"
     end

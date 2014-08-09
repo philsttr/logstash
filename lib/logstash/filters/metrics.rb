@@ -214,7 +214,8 @@ class LogStash::Filters::Metrics < LogStash::Filters::Base
     end
 
     filter_matched(event)
-    return [event]
+    # publish this event in the filter flusher
+    yield event
   end
 
   private

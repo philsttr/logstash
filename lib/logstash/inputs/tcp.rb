@@ -102,7 +102,7 @@ class LogStash::Inputs::Tcp < LogStash::Inputs::Base
   end # def register
 
   private
-  def handle_socket(socket, client_address, output_queue, codec)
+  def handle_socket(socket, client_address, codec)
     while true
       buf = nil
       # NOTE(petef): the timeout only hits after the line is read or socket dies
@@ -118,7 +118,7 @@ class LogStash::Inputs::Tcp < LogStash::Inputs::Base
         event["host"] ||= client_address
         event["sslsubject"] ||= socket.peer_cert.subject if @ssl_enable && @ssl_verify
         decorate(event)
-        output_queue << event
+        event.publish
       end
     end # loop
   rescue EOFError
@@ -134,16 +134,16 @@ class LogStash::Inputs::Tcp < LogStash::Inputs::Base
       event["host"] ||= client_address
       event["sslsubject"] ||= socket.peer_cert.subject if @ssl_enable && @ssl_verify
       decorate(event)
-      output_queue << event
+      event.publish
     end
   end
 
   private
-  def client_thread(output_queue, socket)
-    Thread.new(output_queue, socket) do |q, s|
+  def client_thread(socket)
+    Thread.new(socket) do |s|
       begin
         @logger.debug? && @logger.debug("Accepted connection", :client => s.peer, :server => "#{@host}:#{@port}")
-        handle_socket(s, s.peer, q, @codec.clone)
+        handle_socket(s, s.peer, @codec.clone)
       rescue Interrupted
         s.close rescue nil
       ensure
@@ -163,15 +163,15 @@ class LogStash::Inputs::Tcp < LogStash::Inputs::Base
   end # def readline
 
   public
-  def run(output_queue)
+  def run
     if server?
-      run_server(output_queue)
+      run_server
     else
-      run_client(output_queue)
+      run_client
     end
   end # def run
 
-  def run_server(output_queue)
+  def run_server
     @thread = Thread.current
     @client_threads = []
     @client_threads_lock = Mutex.new
@@ -180,7 +180,7 @@ class LogStash::Inputs::Tcp < LogStash::Inputs::Base
       begin
         socket = @server_socket.accept
         # start a new thread for each connection.
-        @client_threads_lock.synchronize{@client_threads << client_thread(output_queue, socket)}
+        @client_threads_lock.synchronize{@client_threads << client_thread(socket)}
       rescue OpenSSL::SSL::SSLError => ssle
         # NOTE(mrichar1): This doesn't return a useful error message for some reason
         @logger.error("SSL Error", :exception => ssle, :backtrace => ssle.backtrace)
@@ -207,7 +207,7 @@ class LogStash::Inputs::Tcp < LogStash::Inputs::Base
     @server_socket.close rescue nil
   end # def run_server
 
-  def run_client(output_queue)
+  def run_client
     @thread = Thread.current
     while true
       client_socket = TCPSocket.new(@host, @port)
@@ -223,7 +223,7 @@ class LogStash::Inputs::Tcp < LogStash::Inputs::Base
         end
       end
       @logger.debug("Opened connection", :client => "#{client_socket.peer}")
-      handle_socket(client_socket, client_socket.peer, output_queue, @codec.clone)
+      handle_socket(client_socket, client_socket.peer, @codec.clone)
     end # loop
   ensure
     client_socket.close rescue nil

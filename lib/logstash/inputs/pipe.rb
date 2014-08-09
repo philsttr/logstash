@@ -29,11 +29,12 @@ class LogStash::Inputs::Pipe < LogStash::Inputs::Base
   end # def register
 
   public
-  def run(queue)
-    loop do
+  def run
+    while !finished?
       begin
         @pipe = IO.popen(@command, mode="r")
         hostname = Socket.gethostname
+        @pid = @pipe.pid
 
         @pipe.each do |line|
           line = line.chomp
@@ -43,17 +44,28 @@ class LogStash::Inputs::Pipe < LogStash::Inputs::Base
             event["host"] = hostname
             event["command"] = @command
             decorate(event)
-            queue << event
+            event.publish
           end
         end
       rescue LogStash::ShutdownSignal => e
         break
       rescue Exception => e
         @logger.error("Exception while running command", :e => e, :backtrace => e.backtrace)
+      ensure
+        @pid = nil if @pid
+        @pipe.close if @pipe && !@pipe.closed?
       end
 
       # Keep running the command forever.
       sleep(10)
     end
   end # def run
+  
+  public
+  def teardown
+    # Kill the underlying piped process to ensure a clean shutdown
+    Process.kill('INT', @pid) if @pid && !@pipe.closed? && !finished?
+    finished
+  end
+  
 end # class LogStash::Inputs::Pipe

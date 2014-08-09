@@ -34,7 +34,7 @@ class LogStash::Inputs::Exec < LogStash::Inputs::Base
   end # def register
 
   public
-  def run(queue)
+  def run
     hostname = Socket.gethostname
     loop do
       start = Time.now
@@ -45,7 +45,7 @@ class LogStash::Inputs::Exec < LogStash::Inputs::Base
         decorate(event)
         event["host"] = hostname
         event["command"] = @command
-        queue << event
+        event.publish
       end
       out.close
 

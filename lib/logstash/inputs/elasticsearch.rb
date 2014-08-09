@@ -92,7 +92,7 @@ class LogStash::Inputs::Elasticsearch < LogStash::Inputs::Base
   end
 
   public
-  def run(output_queue)
+  def run
     result = LogStash::Json.load(execute_search_request)
     scroll_id = result["_scroll_id"]
 
@@ -111,7 +111,7 @@ class LogStash::Inputs::Elasticsearch < LogStash::Inputs::Base
         # Hack to make codecs work
         @codec.decode(LogStash::Json.dump(hit["_source"])) do |event|
           decorate(event)
-          output_queue << event
+          event.publish
         end
       end
 

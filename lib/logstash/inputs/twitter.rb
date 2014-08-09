@@ -62,7 +62,7 @@ class LogStash::Inputs::Twitter < LogStash::Inputs::Base
   end
 
   public
-  def run(queue)
+  def run
     @logger.info("Starting twitter tracking", :keywords => @keywords)
     @client.filter(:track => @keywords.join(",")) do |tweet|
       @logger.info? && @logger.info("Got tweet", :user => tweet.user.screen_name, :text => tweet.text)
@@ -84,7 +84,7 @@ class LogStash::Inputs::Twitter < LogStash::Inputs::Base
       unless tweet.urls.empty?
         event["urls"] = tweet.urls.map(&:expanded_url).map(&:to_s)
       end
-      queue << event
+      event.publish
     end # client.filter
   end # def run
 end # class LogStash::Inputs::Twitter

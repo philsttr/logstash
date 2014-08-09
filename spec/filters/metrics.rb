@@ -2,6 +2,12 @@ require "logstash/filters/metrics"
 
 describe LogStash::Filters::Metrics do
 
+  def flush_and_gather(filter)
+    events = []
+    filter.flush { | event | events << event }
+    return events
+  end
+
   context "with basic meter config" do
     context "when no events were received" do
       it "should not flush" do
@@ -9,8 +15,8 @@ describe LogStash::Filters::Metrics do
         filter = LogStash::Filters::Metrics.new config
         filter.register
 
-        events = filter.flush
-        insist { events }.nil?
+        events = flush_and_gather(filter)
+        insist { events.length } == 0
       end
     end
 
@@ -23,7 +29,7 @@ describe LogStash::Filters::Metrics do
           filter.filter LogStash::Event.new({"response" => 200})
           filter.filter LogStash::Event.new({"response" => 200})
           filter.filter LogStash::Event.new({"response" => 404})
-          filter.flush
+          flush_and_gather(filter)
         }
 
         it "should flush counts" do
@@ -50,8 +56,8 @@ describe LogStash::Filters::Metrics do
           filter.filter LogStash::Event.new({"response" => 200})
           filter.filter LogStash::Event.new({"response" => 404})
 
-          events = filter.flush
-          events = filter.flush
+          events = flush_and_gather(filter)
+          events = flush_and_gather(filter)
           insist { events.length } == 1
           insist { events.first["http.200.count"] } == 2
           insist { events.first["http.404.count"] } == 1
@@ -71,7 +77,7 @@ describe LogStash::Filters::Metrics do
           filter.filter LogStash::Event.new({"response" => 200})
           filter.filter LogStash::Event.new({"response" => 200})
           filter.filter LogStash::Event.new({"response" => 404})
-          filter.flush
+          flush_and_gather(filter)
         }
 
         it "should include only the requested rates" do
@@ -100,8 +106,8 @@ describe LogStash::Filters::Metrics do
         filter_tag2.filter event
       end
 
-      events_tag1 = filter_tag1.flush
-      events_tag2 = filter_tag2.flush
+      events_tag1 = flush_and_gather(filter_tag1)
+      events_tag2 = flush_and_gather(filter_tag2)
 
       insist { events_tag1.first["http.200.count"] } == 1
       insist { events_tag2.first["http.200.count"] } == 2
@@ -117,7 +123,7 @@ describe LogStash::Filters::Metrics do
         filter.filter LogStash::Event.new({"request_time" => 10})
         filter.filter LogStash::Event.new({"request_time" => 20})
         filter.filter LogStash::Event.new({"request_time" => 30})
-        filter.flush
+        flush_and_gather(filter)
       }
 
       it "should flush counts" do
@@ -165,7 +171,7 @@ describe LogStash::Filters::Metrics do
         filter = LogStash::Filters::Metrics.new config
         filter.register
         filter.filter LogStash::Event.new({"request_time" => 1})
-        filter.flush
+        flush_and_gather(filter)
       }
 
       it "should flush counts" do
@@ -196,12 +202,12 @@ describe LogStash::Filters::Metrics do
       filter.register
       filter.filter LogStash::Event.new({"response" => 200})
 
-      insist { filter.flush }.nil?        # 5s
-      insist { filter.flush }.nil?        # 10s
-      insist { filter.flush.length } == 1 # 15s
-      insist { filter.flush }.nil?        # 20s
-      insist { filter.flush }.nil?        # 25s
-      insist { filter.flush.length } == 1 # 30s
+      insist { flush_and_gather(filter).length } == 0 # 5s
+      insist { flush_and_gather(filter).length } == 0 # 10s
+      insist { flush_and_gather(filter).length } == 1 # 15s
+      insist { flush_and_gather(filter).length } == 0 # 20s
+      insist { flush_and_gather(filter).length } == 0 # 25s
+      insist { flush_and_gather(filter).length } == 1 # 30s
     end
   end
 
@@ -212,10 +218,10 @@ describe LogStash::Filters::Metrics do
       filter.register
       filter.filter LogStash::Event.new({"response" => 200})
 
-      insist { filter.flush.first["http.200.count"] } == 1 # 5s
-      insist { filter.flush.first["http.200.count"] } == 1 # 10s
-      insist { filter.flush.first["http.200.count"] } == 1 # 15s
-      insist { filter.flush }.nil?                         # 20s
+      insist { flush_and_gather(filter).first["http.200.count"] } == 1 # 5s
+      insist { flush_and_gather(filter).first["http.200.count"] } == 1 # 10s
+      insist { flush_and_gather(filter).first["http.200.count"] } == 1 # 15s
+      insist { flush_and_gather(filter).length }  == 0                 # 20s
     end
   end
 

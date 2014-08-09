@@ -186,26 +186,30 @@ class LogStash::Outputs::ElasticSearchHTTP < LogStash::Outputs::Base
   public
   def receive(event)
     return unless output?(event)
-    buffer_receive([event, index, type])
+    
+    index = event.sprintf(@index)
+    # Set the 'type' value for the index.
+    if @index_type.nil?
+      type =  event["type"] || "logs"
+    else
+      type = event.sprintf(@index_type)
+    end
+    
+    id = event.sprintf(@document_id) if !@document_id.nil?
+    
+    buffer_receive([event.to_json, index, type, id])
   end # def receive
 
   def flush(events, teardown=false)
     # Avoid creating a new string for newline every time
     newline = "\n".freeze
 
-    body = events.collect do |event, index, type|
-      index = event.sprintf(@index)
+    body = events.collect do |event, index, type, id|
 
-      # Set the 'type' value for the index.
-      if @index_type.nil?
-        type =  event["type"] || "logs"
-      else
-        type = event.sprintf(@index_type)
-      end
       header = { "index" => { "_index" => index, "_type" => type } }
-      header["index"]["_id"] = event.sprintf(@document_id) if !@document_id.nil?
+      header["index"]["_id"] = !id.nil?
 
-      [ LogStash::Json.dump(header), newline, event.to_json, newline ]
+      [ LogStash::Json.dump(header), newline, event, newline ]
     end.flatten
 
     post(body.join(""))

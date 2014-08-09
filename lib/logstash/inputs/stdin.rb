@@ -19,7 +19,7 @@ class LogStash::Inputs::Stdin < LogStash::Inputs::Base
     fix_streaming_codecs
   end # def register
 
-  def run(queue) 
+  def run 
     while true
       begin
         # Based on some testing, there is no way to interrupt an IO.sysread nor
@@ -28,7 +28,7 @@ class LogStash::Inputs::Stdin < LogStash::Inputs::Base
         @codec.decode(data) do |event|
           decorate(event)
           event["host"] = @host
-          queue << event
+          event.publish
         end
       rescue EOFError, LogStash::ShutdownSignal
         # stdin closed or a requested shutdown

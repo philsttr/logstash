@@ -48,10 +48,10 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   end # def register
 
   public
-  def run(output_queue)
+  def run
     begin
       # snmp trap server
-      snmptrap_listener(output_queue)
+      snmptrap_listener
     rescue => e
       @logger.warn("SNMP Trap listener died", :exception => e, :backtrace => e.backtrace)
       sleep(5)
@@ -60,7 +60,7 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   end # def run
 
   private
-  def snmptrap_listener(output_queue)
+  def snmptrap_listener
     traplistener_opts = {:Port => @port, :Community => @community, :Host => @host}
     if @yaml_mibs && !@yaml_mibs.empty?
       traplistener_opts.merge!({:MibDir => @yamlmibdir, :MibModules => @yaml_mibs})
@@ -76,7 +76,7 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
           event[vb.name.to_s] = vb.value.to_s
         end
         @logger.debug("SNMP Trap received: ", :trap_object => trap.inspect)
-        output_queue << event
+        event.publish
       rescue => event
         @logger.error("Failed to create event", :trap_object => trap.inspect)
       end

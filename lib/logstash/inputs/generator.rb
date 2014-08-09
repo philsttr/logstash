@@ -53,7 +53,7 @@ class LogStash::Inputs::Generator < LogStash::Inputs::Threadable
     @count = @count.first if @count.is_a?(Array)
   end # def register
 
-  def run(queue)
+  def run
     number = 0
 
     if @message == "stdin"
@@ -69,7 +69,7 @@ class LogStash::Inputs::Generator < LogStash::Inputs::Threadable
           decorate(event)
           event["host"] = @host
           event["sequence"] = number
-          queue << event
+          event.publish
         end
       end
       number += 1
@@ -79,7 +79,7 @@ class LogStash::Inputs::Generator < LogStash::Inputs::Threadable
       @codec.flush do |event|
         decorate(event)
         event["host"] = @host
-        queue << event
+        event.publish
       end
     end
   end # def run
@@ -89,7 +89,7 @@ class LogStash::Inputs::Generator < LogStash::Inputs::Threadable
     @codec.flush do |event|
       decorate(event)
       event["host"] = @host
-      queue << event
+      event.publish
     end
     finished
   end # def teardown

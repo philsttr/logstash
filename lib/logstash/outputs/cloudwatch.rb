@@ -195,7 +195,7 @@ class LogStash::Outputs::CloudWatch < LogStash::Outputs::Base
     end
 
     @logger.info("Queueing event", :event => event)
-    @event_queue << event
+    @event_queue << extract_event_data(event)
   end # def receive
 
   private
@@ -254,9 +254,10 @@ class LogStash::Outputs::CloudWatch < LogStash::Outputs::Base
     end
     return aggregates
   end # def aggregate
-
+  
   private
-  def count(aggregates, event)
+  def extract_event_data(event)
+    
     # If the event doesn't declare a namespace, use the default
     fnamespace = field(event, @field_namespace)
     namespace = (fnamespace ? fnamespace : event.sprintf(@namespace))
@@ -277,14 +278,10 @@ class LogStash::Outputs::CloudWatch < LogStash::Outputs::Base
 
     # If Unit is still not set or is invalid warn about misconfiguration & use NONE
     if (!VALID_UNITS.include?(unit))
-      unit = NONE
       @logger.warn("Likely config error: invalid or missing Units (#{unit.to_s}), using '#{NONE}' instead", :event => event)
+      unit = NONE
     end
-
-    if (!aggregates[namespace])
-      aggregates[namespace] = {}
-    end
-
+    
     dims = event[@field_dimensions]
     if (dims) # event provides dimensions
               # validate the structure
@@ -301,25 +298,48 @@ class LogStash::Outputs::CloudWatch < LogStash::Outputs::Base
     else
       dims = nil
     end
-
+    
     fmetric = field(event, @field_metricname)
+    metric = fmetric ? fmetric : event.sprintf(@metricname);
+    
+    timestamp = event.sprintf("%{+YYYY-MM-dd'T'HH:mm:00Z}")
+    
     aggregate_key = {
-        METRIC => (fmetric ? fmetric : event.sprintf(@metricname)),
+        METRIC => metric,
         DIMENSIONS => dims,
         UNIT => unit,
-        TIMESTAMP => event.sprintf("%{+YYYY-MM-dd'T'HH:mm:00Z}")
+        TIMESTAMP => timestamp
     }
+    
+    return {
+      :namespace => namespace,
+      :aggregate_key => aggregate_key,
+      :value => val,
+    }
+  end
+
+  private
+  def count(aggregates, eventdata)
+    
+    namespace = eventdata[:namespace]
+    aggregate_key = eventdata[:aggregate_key]
+    value = eventdata[:value]
+
+    if (!aggregates[namespace])
+      aggregates[namespace] = {}
+    end
+
 
     if (!aggregates[namespace][aggregate_key])
       aggregates[namespace][aggregate_key] = {}
     end
 
-    if (!aggregates[namespace][aggregate_key][MAX] || val > aggregates[namespace][aggregate_key][MAX])
-      aggregates[namespace][aggregate_key][MAX] = val
+    if (!aggregates[namespace][aggregate_key][MAX] || value > aggregates[namespace][aggregate_key][MAX])
+      aggregates[namespace][aggregate_key][MAX] = value
     end
 
-    if (!aggregates[namespace][aggregate_key][MIN] || val < aggregates[namespace][aggregate_key][MIN])
-      aggregates[namespace][aggregate_key][MIN] = val
+    if (!aggregates[namespace][aggregate_key][MIN] || value < aggregates[namespace][aggregate_key][MIN])
+      aggregates[namespace][aggregate_key][MIN] = value
     end
 
     if (!aggregates[namespace][aggregate_key][COUNT])
@@ -329,9 +349,9 @@ class LogStash::Outputs::CloudWatch < LogStash::Outputs::Base
     end
 
     if (!aggregates[namespace][aggregate_key][SUM])
-      aggregates[namespace][aggregate_key][SUM] = val
+      aggregates[namespace][aggregate_key][SUM] = value
     else
-      aggregates[namespace][aggregate_key][SUM] += val
+      aggregates[namespace][aggregate_key][SUM] += value
     end
   end # def count
 

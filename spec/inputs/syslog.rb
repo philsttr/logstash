@@ -19,8 +19,6 @@ describe "inputs/syslog", :socket => true do
     CONFIG
 
     input do |pipeline, queue|
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
 
       socket = Stud.try(5.times) { TCPSocket.new("127.0.0.1", port) }
       event_count.times do |i|

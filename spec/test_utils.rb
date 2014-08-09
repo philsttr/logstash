@@ -18,7 +18,7 @@ if ENV['COVERAGE']
 end
 require "insist"
 require "logstash/agent"
-require "logstash/pipeline"
+require "logstash/pipeline/pipeline"
 require "logstash/event"
 require "logstash/logging"
 require "insist"
@@ -77,7 +77,7 @@ module LogStash
 
       describe "\"#{name}\"" do
         extend LogStash::RSpec
-        let(:pipeline) { LogStash::Pipeline.new(config) }
+        let(:pipeline) { LogStash::Pipeline::Pipeline.new(config) }
         let(:event) do
           sample_event = [sample_event] unless sample_event.is_a?(Array)
           next sample_event.collect do |e|
@@ -100,7 +100,13 @@ module LogStash
             results += extra.reject(&:cancelled?)
           end
 
-          pipeline.instance_eval {@filters.each {|f| results += f.flush if f.respond_to?(:flush)}}
+          pipeline.instance_eval do
+            @filters.each do |filter|
+              if filter.respond_to?(:flush)
+                filter.flush { |event| results << event } 
+              end
+            end
+          end 
 
           # TODO(sissel): pipeline flush needs to be implemented.
           # results += pipeline.flush
@@ -113,23 +119,30 @@ module LogStash
       end
     end # def sample
 
-    def input(&block)
+    def input(run_pipeline = true, &block)
       it "inputs" do
-        pipeline = LogStash::Pipeline.new(config)
+        pipeline = LogStash::Pipeline::Pipeline.new(config)
         queue = Queue.new
         pipeline.instance_eval do
-          @output_func = lambda { |event| queue << event }
+          @output_func = lambda { |event, end_of_batch | queue << event }
+        end
+        if run_pipeline
+          pipeline_thread = Thread.new { pipeline.run }
+          sleep 0.1 while !pipeline.ready?
         end
         block.call(pipeline, queue)
-        pipeline.shutdown
+        if run_pipeline
+          pipeline.shutdown
+          pipeline_thread.join
+        end
       end
     end # def input
 
     def agent(&block)
-      require "logstash/pipeline"
+      require "logstash/pipeline/pipeline"
 
       it("agent(#{caller[0].gsub(/ .*/, "")}) runs") do
-        pipeline = LogStash::Pipeline.new(config)
+        pipeline = LogStash::Pipeline::Pipeline.new(config)
         pipeline.run
         block.call
       end

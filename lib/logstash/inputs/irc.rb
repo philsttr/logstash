@@ -68,7 +68,7 @@ class LogStash::Inputs::Irc < LogStash::Inputs::Base
   end # def register
 
   public
-  def run(output_queue)
+  def run
     Thread.new(@bot) do |bot|
       bot.start
     end
@@ -80,7 +80,7 @@ class LogStash::Inputs::Irc < LogStash::Inputs::Base
           event["channel"] = msg.channel.to_s
           event["nick"] = msg.user.nick
           event["server"] = "#{@host}:#{@port}"
-          output_queue << event
+          event.publish
         end
       end
     end

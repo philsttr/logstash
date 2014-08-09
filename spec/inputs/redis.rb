@@ -14,12 +14,13 @@ end
 
 def process(pipeline, queue, event_count)
   sequence = 0
-  Thread.new { pipeline.run }
+  pipeline_thread = Thread.new { pipeline.run }
   event_count.times do |i|
     event = queue.pop
     insist { event["sequence"] } == i
   end
   pipeline.shutdown
+  pipeline_thread.join
 end # process
 
 describe "inputs/redis", :redis => true do

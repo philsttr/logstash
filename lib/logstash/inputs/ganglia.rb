@@ -34,9 +34,9 @@ class LogStash::Inputs::Ganglia < LogStash::Inputs::Base
   end # def register
 
   public
-  def run(output_queue)
+  def run
     begin
-      udp_listener(output_queue)
+      udp_listener
     rescue => e
       if !@shutdown_requested
         @logger.warn("ganglia udp listener died",
@@ -49,7 +49,7 @@ class LogStash::Inputs::Ganglia < LogStash::Inputs::Base
   end # def run
 
   private
-  def udp_listener(output_queue)
+  def udp_listener
     @logger.info("Starting ganglia udp listener", :address => "#{@host}:#{@port}")
 
     if @udp
@@ -68,7 +68,7 @@ class LogStash::Inputs::Ganglia < LogStash::Inputs::Base
       unless e.nil?
         decorate(e)
         e["host"] = client[3] # the IP address
-        output_queue << e
+        e.publish
       end
     end
   ensure

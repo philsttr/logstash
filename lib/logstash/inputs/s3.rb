@@ -132,16 +132,16 @@ class LogStash::Inputs::S3 < LogStash::Inputs::Base
   end # def register
 
   public
-  def run(queue)
+  def run
     loop do
-      process_new(queue)
+      process_new
       sleep(@interval)
     end
     finished
   end # def run
 
   private
-  def process_new(queue, since=nil)
+  def process_new(since=nil)
 
     if since.nil?
         since = sincedb_read()
@@ -151,7 +151,7 @@ class LogStash::Inputs::S3 < LogStash::Inputs::Base
     objects.each do |k|
       @logger.debug("S3 input processing", :bucket => @bucket, :key => k)
       lastmod = @s3bucket.objects[k].last_modified
-      process_log(queue, k)
+      process_log(k)
       sincedb_write(lastmod)
     end
 
@@ -176,7 +176,7 @@ class LogStash::Inputs::S3 < LogStash::Inputs::Base
   end # def list_new
 
   private
-  def process_log(queue, key)
+  def process_log(key)
 
     object = @s3bucket.objects[key]
     tmp = Dir.mktmpdir("logstash-")
@@ -187,7 +187,7 @@ class LogStash::Inputs::S3 < LogStash::Inputs::Base
           s3file.write(chunk)
         end
       end
-      process_local_log(queue, filename)
+      process_local_log(filename)
       unless @backup_to_bucket.nil?
         backup_object = @backup_bucket.objects[key]
         backup_object.write(Pathname.new(filename))
@@ -204,7 +204,7 @@ class LogStash::Inputs::S3 < LogStash::Inputs::Base
   end # def process_log
 
   private
-  def process_local_log(queue, filename)
+  def process_local_log(filename)
 
     metadata = {
       :version => nil,
@@ -214,11 +214,11 @@ class LogStash::Inputs::S3 < LogStash::Inputs::Base
       if filename.end_with?('.gz')
         gz = Zlib::GzipReader.new(file)
         gz.each_line do |line|
-          metadata = process_line(queue, metadata, line)
+          metadata = process_line(metadata, line)
         end
       else
         file.each do |line|
-          metadata = process_line(queue, metadata, line)
+          metadata = process_line(metadata, line)
         end
       end
     end
@@ -226,7 +226,7 @@ class LogStash::Inputs::S3 < LogStash::Inputs::Base
   end # def process_local_log
 
   private
-  def process_line(queue, metadata, line)
+  def process_line(metadata, line)
 
     if /#Version: .+/.match(line)
       junk, version = line.strip().split(/#Version: (.+)/)
@@ -247,7 +247,7 @@ class LogStash::Inputs::S3 < LogStash::Inputs::Base
         unless metadata[:format].nil?
           event["cloudfront_fields"] = metadata[:format]
         end
-        queue << event
+        event.publish
       end
     end
     return metadata

@@ -47,7 +47,7 @@ class LogStash::Inputs::Xmpp < LogStash::Inputs::Base
   end # def register
 
   public
-  def run(queue)
+  def run
     if @rooms
       @rooms.each do |room| # handle muc messages in different rooms
         @muc = Jabber::MUC::SimpleMUCClient.new(@client)
@@ -57,7 +57,7 @@ class LogStash::Inputs::Xmpp < LogStash::Inputs::Base
             decorate(event)
             event["room"] = room
             event["from"] = from
-            queue << event
+            event.publish
           end
         end # @muc.on_message
       end # @rooms.each
@@ -71,7 +71,7 @@ class LogStash::Inputs::Xmpp < LogStash::Inputs::Base
           # Maybe "from" should just be a hash: 
           # { "node" => ..., "domain" => ..., "resource" => ... }
           event["from"] = "#{msg.from.node}@#{msg.from.domain}/#{msg.from.resource}"
-          queue << event
+          event.publish
         end
       end
     end # @client.add_message_callback

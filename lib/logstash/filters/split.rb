@@ -54,7 +54,7 @@ class LogStash::Filters::Split < LogStash::Filters::Base
       event_split[@field] = value
       filter_matched(event_split)
 
-      # Push this new event onto the stack at the LogStash::FilterWorker
+      # publish this event in the FilterEventHandler
       yield event_split
     end
 

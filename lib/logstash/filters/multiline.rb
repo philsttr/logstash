@@ -156,6 +156,8 @@ class LogStash::Filters::Multiline < LogStash::Filters::Base
 
     # Add negate option
     match = (match and !@negate) || (!match and @negate)
+    
+    newevent = nil
 
     case @what
     when "previous"
@@ -164,9 +166,9 @@ class LogStash::Filters::Multiline < LogStash::Filters::Base
         # previous previous line is part of this event.
         # append it to the event and cancel it
         if pending
-          pending.append(event)
+          LogStash::Util.hash_merge(pending, event.to_hash)
         else
-          @pending[key] = event
+          @pending[key] = event.to_hash
         end
         event.cancel
       else
@@ -174,13 +176,10 @@ class LogStash::Filters::Multiline < LogStash::Filters::Base
         # if we have a pending event, it's done, send it.
         # put the current event into pending
         if pending
-          tmp = event.to_hash
-          event.overwrite(pending)
-          @pending[key] = LogStash::Event.new(tmp)
-        else
-          @pending[key] = event
-          event.cancel
+          newevent = LogStash::Event.new(pending);
         end # if/else pending
+        @pending[key] = event.to_hash
+        event.cancel
       end # if/else match
     when "next"
       if match
@@ -188,18 +187,19 @@ class LogStash::Filters::Multiline < LogStash::Filters::Base
         # this line is part of a multiline event, the next
         # line will be part, too, put it into pending.
         if pending
-          pending.append(event)
+          LogStash::Util.hash_merge(pending, event.to_hash)
         else
-          @pending[key] = event
+          @pending[key] = event.to_hash
         end
         event.cancel
       else
-        # if we have something in pending, join it with this message
+        # if we have something in pending, join this message with it
         # and send it. otherwise, this is a new message and not part of
         # multiline, send it.
         if pending
-          pending.append(event)
-          event.overwrite(pending)
+          LogStash::Util.hash_merge(pending, event.to_hash)
+          newevent = LogStash::Event.new(pending);
+          event.cancel
           @pending.delete(key)
         end
       end # if/else match
@@ -210,8 +210,15 @@ class LogStash::Filters::Multiline < LogStash::Filters::Base
 
     if !event.cancelled?
       collapse_event!(event)
-      filter_matched(event) if match
+      filter_matched(event) if event.tag?("multiline")
     end
+    
+    if newevent
+      collapse_event!(newevent)
+      filter_matched(newevent) if newevent.tag?("multiline")
+      yield newevent
+    end
+    
   end # def filter
 
   # Flush any pending messages. This is generally used for unit testing only.
@@ -221,13 +228,10 @@ class LogStash::Filters::Multiline < LogStash::Filters::Base
   def flush
     return [] unless @enable_flush
 
-    events = []
-    @pending.each do |key, value|
-      value.uncancel
-      events << collapse_event!(value)
+    @pending.each do |key, pending|
+      yield collapse_event!(LogStash::Event.new(pending))
     end
     @pending.clear
-    return events
   end # def flush
 
   private

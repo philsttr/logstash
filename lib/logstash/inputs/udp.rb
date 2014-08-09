@@ -43,11 +43,10 @@ class LogStash::Inputs::Udp < LogStash::Inputs::Base
   end # def register
 
   public
-  def run(output_queue)
-	@output_queue = output_queue
+  def run
     begin
       # udp server
-      udp_listener(output_queue)
+      udp_listener
     rescue LogStash::ShutdownSignal
       # do nothing, shutdown was requested.
     rescue => e
@@ -58,7 +57,7 @@ class LogStash::Inputs::Udp < LogStash::Inputs::Base
   end # def run
 
   private
-  def udp_listener(output_queue)
+  def udp_listener
     @logger.info("Starting UDP listener", :address => "#{@host}:#{@port}")
 
     if @udp && ! @udp.closed?
@@ -100,7 +99,7 @@ class LogStash::Inputs::Udp < LogStash::Inputs::Base
 		    @codec.decode(payload) do |event|
           decorate(event)
           event["host"] ||= client[3]
-		      @output_queue.push(event)
+		      event.publish
 		    end
       end
 

@@ -41,8 +41,7 @@ class LogStash::Inputs::RabbitMQ
       @logger.info("Registering input #{@connection_url}")
     end
 
-    def run(output_queue)
-      @output_queue = output_queue
+    def run
 
       begin
         setup
@@ -109,7 +108,7 @@ class LogStash::Inputs::RabbitMQ
       @q.subscribe(:manual_ack => @ack, :block => true) do |delivery_info, properties, data|
         @codec.decode(data) do |event|
           decorate(event)
-          @output_queue << event
+          event.publish
         end
 
         @ch.acknowledge(delivery_info.delivery_tag) if @ack

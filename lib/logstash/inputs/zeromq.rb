@@ -120,7 +120,7 @@ class LogStash::Inputs::ZeroMQ < LogStash::Inputs::Base
     @mode == "server"
   end # def server?
 
-  def run(output_queue)
+  def run
     host = Socket.gethostname
     begin
       loop do
@@ -145,7 +145,7 @@ class LogStash::Inputs::ZeroMQ < LogStash::Inputs::Base
         @codec.decode(msg) do |event|
           event["host"] ||= host
           decorate(event)
-          output_queue << event
+          event.publish
         end
       end
     rescue LogStash::ShutdownSignal

@@ -128,11 +128,11 @@ EOF
   end
 
   private
-  def queue_event(msg, output_queue)
+  def queue_event(msg)
     begin
       @codec.decode(msg) do |event|
         decorate(event)
-        output_queue << event
+        event.publish
       end
     rescue => e # parse or event creation error
       @logger.error("Failed to create event", :message => msg, :exception => e,
@@ -141,7 +141,7 @@ EOF
   end
 
   private
-  def list_listener(redis, output_queue)
+  def list_listener(redis)
 
     # blpop returns the 'key' read from as well as the item result
     # we only care about the result (2nd item in the list).
@@ -150,14 +150,14 @@ EOF
     # blpop failed or .. something?
     # TODO(sissel): handle the error
     return if item.nil?
-    queue_event(item, output_queue)
+    queue_event(item)
 
     # If @batch_count is 1, there's no need to continue.
     return if @batch_count == 1
 
     begin
       redis.evalsha(@redis_script_sha, [@key], [@batch_count-1]).each do |item|
-        queue_event(item, output_queue)
+        queue_event(item)
       end
 
       # Below is a commented-out implementation of 'batch fetch'
@@ -171,7 +171,7 @@ EOF
         #error, item = redis.lpop(@key)
         #(@batch_count-1).times { redis.lpop(@key) }
       #end.each do |item|
-        #queue_event(item, output_queue) if item
+        #queue_event(item) if item
       #end
       # --- End commented out implementation of 'batch fetch'
     rescue Redis::CommandError => e
@@ -186,14 +186,14 @@ EOF
   end
 
   private
-  def channel_listener(redis, output_queue)
+  def channel_listener(redis)
     redis.subscribe @key do |on|
       on.subscribe do |channel, count|
         @logger.info("Subscribed", :channel => channel, :count => count)
       end
 
       on.message do |channel, message|
-        queue_event message, output_queue
+        queue_event message
       end
 
       on.unsubscribe do |channel, count|
@@ -203,14 +203,14 @@ EOF
   end
 
   private
-  def pattern_channel_listener(redis, output_queue)
+  def pattern_channel_listener(redis)
     redis.psubscribe @key do |on|
       on.psubscribe do |channel, count|
         @logger.info("Subscribed", :channel => channel, :count => count)
       end
 
       on.pmessage do |ch, event, message|
-        queue_event message, output_queue
+        queue_event message
       end
 
       on.punsubscribe do |channel, count|
@@ -222,11 +222,11 @@ EOF
   # Since both listeners have the same basic loop, we've abstracted the outer
   # loop.
   private
-  def listener_loop(listener, output_queue)
+  def listener_loop(listener)
     while !finished?
       begin
         @redis ||= connect
-        self.send listener, @redis, output_queue
+        self.send listener, @redis
       rescue Redis::CannotConnectError => e
         @logger.warn("Redis connection problem", :exception => e)
         sleep 1
@@ -240,13 +240,13 @@ EOF
   end # listener_loop
 
   public
-  def run(output_queue)
+  def run
     if @data_type == 'list'
-      listener_loop :list_listener, output_queue
+      listener_loop :list_listener
     elsif @data_type == 'channel'
-      listener_loop :channel_listener, output_queue
+      listener_loop :channel_listener
     else
-      listener_loop :pattern_channel_listener, output_queue
+      listener_loop :pattern_channel_listener
     end
   end # def run
 

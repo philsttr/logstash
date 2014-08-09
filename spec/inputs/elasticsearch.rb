@@ -56,10 +56,10 @@ describe "inputs/elasticsearch" do
     expect_any_instance_of(LogStash::Inputs::Elasticsearch).to receive(:execute_search_request).and_return(search_response)
     expect_any_instance_of(LogStash::Inputs::Elasticsearch).to receive(:execute_scroll_request).with(any_args).and_return(scroll_response)
 
-    pipeline = LogStash::Pipeline.new(config)
+    pipeline = LogStash::Pipeline::Pipeline.new(config)
     queue = Queue.new
     pipeline.instance_eval do
-      @output_func = lambda { |event| queue << event }
+      @output_func = lambda { |event, end_of_batch| queue << event }
     end
     pipeline_thread = Thread.new { pipeline.run }
     event = queue.pop

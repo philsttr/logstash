@@ -10,10 +10,10 @@ class LogStash::Inputs::InvalidInput < LogStash::Inputs::Base
   public
   def register; end
 
-  def run(queue)
+  def run
     event = LogStash::Event.new("message" =>"hello world 1 ÅÄÖ \xED")
     decorate(event)
-    queue << event
+    event.publish
     loop do; sleep(1); end
   end
 end

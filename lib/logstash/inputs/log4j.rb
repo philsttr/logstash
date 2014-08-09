@@ -60,7 +60,7 @@ class LogStash::Inputs::Log4j < LogStash::Inputs::Base
   end # def register
 
   private
-  def handle_socket(socket, output_queue)
+  def handle_socket(socket)
     begin
       # JRubyObjectInputStream uses JRuby class path to find the class to de-serialize to
       ois = JRubyObjectInputStream.new(java.io.BufferedInputStream.new(socket.to_inputstream))
@@ -87,7 +87,7 @@ class LogStash::Inputs::Log4j < LogStash::Inputs::Base
           end
         end
 
-        output_queue << event
+        event.publish
       end # loop do
     rescue => e
       @logger.debug("Closing connection", :client => socket.peer,
@@ -115,7 +115,7 @@ class LogStash::Inputs::Log4j < LogStash::Inputs::Base
   end # def readline
 
   public
-  def run(output_queue)
+  def run
     if server?
       loop do
         # Start a new thread for each connection.
@@ -126,7 +126,7 @@ class LogStash::Inputs::Log4j < LogStash::Inputs::Base
           s.instance_eval { class << self; include ::LogStash::Util::SocketPeer end }
           @logger.debug("Accepted connection", :client => s.peer,
                         :server => "#{@host}:#{@port}")
-          handle_socket(s, output_queue)
+          handle_socket(s)
         end # Thread.start
       end # loop
     else
@@ -134,7 +134,7 @@ class LogStash::Inputs::Log4j < LogStash::Inputs::Base
         client_socket = TCPSocket.new(@host, @port)
         client_socket.instance_eval { class << self; include ::LogStash::Util::SocketPeer end }
         @logger.debug("Opened connection", :client => "#{client_socket.peer}")
-        handle_socket(client_socket, output_queue)
+        handle_socket(client_socket)
       end # loop
     end
   end # def run

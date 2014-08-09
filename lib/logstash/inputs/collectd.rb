@@ -140,12 +140,12 @@ class LogStash::Inputs::Collectd < LogStash::Inputs::Base
   end # def register
 
   public
-  def run(output_queue)
+  def run
     begin
       # get types
       get_types(@typesdb)
       # collectd server
-      collectd_listener(output_queue)
+      collectd_listener
     rescue LogStash::ShutdownSignal
       # do nothing, shutdown was requested.
     rescue => e
@@ -328,16 +328,16 @@ class LogStash::Inputs::Collectd < LogStash::Inputs::Base
   end # def decrypt_packet
 
   private
-  def generate_event(output_queue)
+  def generate_event
     # Prune these *specific* keys if they exist and are empty.
     # This is better than looping over all keys every time.
     @collectd.delete('type_instance') if @collectd['type_instance'] == ""
     @collectd.delete('plugin_instance') if @collectd['plugin_instance'] == ""
-    # As crazy as it sounds, this is where we actually send our events to the queue!
+    # As crazy as it sounds, this is where we actually publish our events to the pipeline!
     event = LogStash::Event.new
     @collectd.each {|k, v| event[k] = @collectd[k]}
     decorate(event)
-    output_queue << event
+    event.publish
   end # def generate_event
 
   private
@@ -355,7 +355,7 @@ class LogStash::Inputs::Collectd < LogStash::Inputs::Base
   end
 
   private
-  def collectd_listener(output_queue)
+  def collectd_listener
     @logger.info("Starting Collectd listener", :address => "#{@host}:#{@port}")
 
     if @udp && ! @udp.closed?
@@ -437,7 +437,7 @@ class LogStash::Inputs::Collectd < LogStash::Inputs::Base
 
         if ["interval", "values"].include?(field)
           if ((@prune_intervals && ![7,9].include?(typenum)) || !@prune_intervals)
-            generate_event(output_queue)
+            generate_event
           end
           clean_up()
         end

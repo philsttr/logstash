@@ -19,14 +19,12 @@ describe "inputs/file" do
       }
     CONFIG
 
-    input do |pipeline, queue|
-      File.open(tmp_file, "w") do |fd|
-        fd.puts("ignore me 1")
-        fd.puts("ignore me 2")
-      end
+    File.open(tmp_file, "w") do |fd|
+      fd.puts("ignore me 1")
+      fd.puts("ignore me 2")
+    end
 
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
+    input do |pipeline, queue|
 
       # at this point even if pipeline.ready? == true the plugins
       # threads might still be initializing so we cannot know when the
@@ -70,18 +68,17 @@ describe "inputs/file" do
       }
     CONFIG
 
-    input do |pipeline, queue|
-      File.open(tmp_file, "a") do |fd|
-        fd.puts("hello")
-        fd.puts("world")
-      end
+    File.open(tmp_file, "a") do |fd|
+      fd.puts("hello")
+      fd.puts("world")
+    end
 
-      Thread.new { pipeline.run }
-      sleep 0.1 while !pipeline.ready?
+    input do |pipeline, queue|
 
       events = 2.times.collect { queue.pop }
       insist { events[0]["message"] } == "hello"
       insist { events[1]["message"] } == "world"
+
     end
   end
 
@@ -100,18 +97,18 @@ describe "inputs/file" do
       }
     CONFIG
 
-    input do |pipeline, queue|
+    input false do |pipeline, queue|
       File.open(tmp_file, "w") do |fd|
         fd.puts("hello")
         fd.puts("world")
       end
 
-      t = Thread.new { pipeline.run }
+      pipeline_thread = Thread.new { pipeline.run }
       sleep 0.1 while !pipeline.ready?
 
       events = 2.times.collect { queue.pop }
       pipeline.shutdown
-      t.join
+      pipeline_thread.join
 
       File.open(tmp_file, "a") do |fd|
         fd.puts("foo")
@@ -119,7 +116,7 @@ describe "inputs/file" do
         fd.puts("baz")
       end
 
-      Thread.new { pipeline.run }
+      pipeline_thread = Thread.new { pipeline.run }
       sleep 0.1 while !pipeline.ready?
 
       events = 3.times.collect { queue.pop }
@@ -127,6 +124,9 @@ describe "inputs/file" do
       insist { events[0]["message"] } == "foo"
       insist { events[1]["message"] } == "bar"
       insist { events[2]["message"] } == "baz"
+
+      pipeline.shutdown
+      pipeline_thread.join
     end
   end
 end
